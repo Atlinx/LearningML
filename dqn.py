@@ -76,6 +76,7 @@ episode_durations = [] # episode -> how long a "round" is
 optimizer = torch.optim.Adam(online_net.parameters(), lr=5e-4) # optimize loss function
 
 replay_memory = deque(maxlen=50000) # memory has size of 50k, after more, then it starts forgetting
+avg_window_steps = deque([])
 
 for t in range(1000):
 	state, _ = env.reset()
@@ -151,17 +152,20 @@ for t in range(1000):
 			target_net.load_state_dict(online_net.state_dict())
 		
 		if done:
-			print(step)
+			avg_window_steps.append(step)
+			if len(avg_window_steps) > 5:
+				avg_window_steps.popleft()
+			avg_steps = np.average(avg_window_steps)
+			print(f"s: {step}   10-avg: {avg_steps}")
+			if avg_steps >= 499:
+				# game is done, run a simulation
+				env = gym.make("CartPole-v1", render_mode="human")
+				state, _ = env.reset()
+				while True:
+					action = online_net.act(state)
+					state, _, term, trunc, _ = env.step(action)
+					done = term or trunc
+					env.render()
+					if done:
+						state, _ = env.reset()
 			break
-
-		if step >= 1000:
-			# game is done, run a simulation
-			env = gym.make("CartPole-v1", render_mode="human")
-			state, _ = env.reset()
-			while True:
-				action = online_net.act(state)
-				state, _, term, trunc, _ = env.step(action)
-				done = term or trunc
-				env.render()
-				if done:
-					state, _ = env.reset()
